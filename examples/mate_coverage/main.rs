@@ -2,6 +2,8 @@ use chess5dlib::parse::test::read_and_parse_opt;
 use chess5dlib::*;
 use chess5dlib::utils::list_legal_movesets;
 use rand::{Rng, prelude::SliceRandom};
+use rand::prelude::*;
+use rand_pcg::Pcg64;
 use std::fs::read_dir;
 use std::time::{Duration, Instant};
 use std::path::Path;
@@ -14,7 +16,7 @@ const MAX_TIMELINES: usize = 8;
 // bit 1 (2¹=2): GenLegalMovesetIter
 // bit 2 (2²=4): list_legal_movesets
 // This means that 7 runs all of the methods and compares their results and 2 only runs GenLegalMovesetIter
-const METHOD: u8 = 7;
+const METHOD: u8 = 1;
 
 // The higher, the more games will be analyzed. Games are randomly sampled from the database without putting them back in the pool, so it will take a lot of games to get a statistically representative number.
 const N_GAMES: usize = 100;
@@ -28,7 +30,7 @@ const MAX_SECONDS: usize = 10;
 
 fn main() {
     checkmates();
-    nonmates();
+    //nonmates();
 }
 
 // Note: sigma measures the sum of the time taken to prove mate/nonmate, but only for the valid samples
@@ -39,7 +41,7 @@ fn nonmates() {
     let dir = read_dir(Path::new("./converted-db/standard/none"));
     assert!(dir.is_ok(), "Can't open `./converted-db/standard/none`");
     let mut dir = dir.unwrap().filter_map(|entry| entry.ok()).collect::<Vec<_>>();
-    let mut rng = rand::thread_rng();
+    let mut rng = Pcg64::seed_from_u64(1234); //rand::thread_rng();
 
     dir.shuffle(&mut rng);
 
@@ -188,7 +190,7 @@ fn checkmates() {
     let dir = read_dir(Path::new("./converted-db/standard/black"));
     assert!(dir.is_ok(), "Can't open `./converted-db/standard/black`");
     let mut dir = dir.unwrap().filter_map(|entry| entry.ok()).collect::<Vec<_>>();
-    let mut rng = rand::thread_rng();
+    let mut rng = Pcg64::seed_from_u64(1234); //rand::thread_rng();
 
     dir.shuffle(&mut rng);
 
@@ -212,6 +214,7 @@ fn checkmates() {
         .take(N_GAMES * 2)
         .collect();
 
+    println!("games length: {}", games.len());
     println!("Testing checkmates, {} random games...", N_GAMES);
     let mut ok = 0;
     let mut sigma = Duration::new(0, 0);
@@ -228,7 +231,7 @@ fn checkmates() {
     for _ in 0..N_GAMES {
         let game = &games[rng.gen_range(0..games.len())];
         let partial_game = no_partial_game(&game.0);
-        let start = Instant::now();
+        let mut start = Instant::now();
 
         if !SILENT {
             println!("Analyzing game: {} timelines, {} playable boards ...", game.0.info.len_timelines(), partial_game.own_boards(&game.0).count());
@@ -267,6 +270,7 @@ fn checkmates() {
             }
         }
         if METHOD & 2 > 0 {
+            start = Instant::now();
             let mut iter = GenLegalMovesetIter::new(&game.0, &partial_game, Some(Duration::new(10, 0)));
             match iter.next() {
                 Some((_ms, _pos)) => {
@@ -291,6 +295,7 @@ fn checkmates() {
             }
         }
         if METHOD & 4 > 0 {
+            start = Instant::now();
             let mut iter = list_legal_movesets(&game.0, &partial_game, Some(Duration::new(10, 0)));
             match iter.next() {
                 Some((_ms, _pos)) => {
